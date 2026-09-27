@@ -1,6 +1,6 @@
 # ============================================================================
 #  Backend Spring Boot
-#  Remplacez IMAGE_BACKEND par la valeur affichée par « terraform output
+#  Remplacez europe-west1-docker.pkg.dev/gamegauge-essai-38986/gamegauge-images/gamegauge-api:essai par la valeur affichée par « terraform output
 #  image_prefix », suivie de /gamegauge-api:essai
 #  Exemple :
 #    europe-west1-docker.pkg.dev/mon-projet/gamegauge-images/gamegauge-api:essai
@@ -55,7 +55,7 @@ spec:
             - until nc -z mysql 3306; do echo "attente de mysql..."; sleep 3; done
       containers:
         - name: backend
-          image: IMAGE_BACKEND
+          image: europe-west1-docker.pkg.dev/gamegauge-essai-38986/gamegauge-images/gamegauge-api:essai
           # Le tag « essai » est mutable : on le réécrit à chaque build. Or
           # Kubernetes n'applique « Always » par défaut qu'au tag « latest »,
           # et retomberait ici sur IfNotPresent — le nœud réutiliserait alors

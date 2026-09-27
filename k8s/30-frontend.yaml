@@ -1,6 +1,6 @@
 # ============================================================================
 #  Frontend Angular servi par nginx
-#  Remplacez IMAGE_FRONTEND par « terraform output image_prefix » suivi de
+#  Remplacez europe-west1-docker.pkg.dev/gamegauge-essai-38986/gamegauge-images/gamegauge-ui:essai par « terraform output image_prefix » suivi de
 #  /gamegauge-ui:essai
 #
 #  Le Service est de type LoadBalancer : GKE provisionne automatiquement un
@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: IMAGE_FRONTEND
+          image: europe-west1-docker.pkg.dev/gamegauge-essai-38986/gamegauge-images/gamegauge-ui:essai
           # Même raison que pour le backend : le tag « essai » étant réécrit
           # à chaque build, il faut forcer le téléchargement.
           imagePullPolicy: Always
