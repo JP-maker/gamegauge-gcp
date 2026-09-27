@@ -1,0 +1,149 @@
+# ============================================================================
+#  Backend Spring Boot
+#  Remplacez IMAGE_BACKEND par la valeur affichée par « terraform output
+#  image_prefix », suivie de /gamegauge-api:essai
+#  Exemple :
+#    europe-west1-docker.pkg.dev/mon-projet/gamegauge-images/gamegauge-api:essai
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: gamegauge
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: gamegauge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+      annotations:
+        # Ces trois annotations suffisent à faire entrer le pod dans la
+        # supervision : le job « kubernetes-pods » de Prometheus découvre
+        # tout pod qui les porte. Rien à modifier côté Prometheus.
+        # Elles restent sans effet tant que l'image n'est pas reconstruite
+        # avec Actuator et Micrometer (voir api-instrumentation/).
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+    spec:
+      initContainers:
+        # Spring Boot abandonne au démarrage si la base est injoignable.
+        # Plutôt que de laisser le pod tourner en CrashLoopBackOff pendant
+        # que MySQL s'initialise, on attend explicitement que le port réponde.
+        - name: wait-for-mysql
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z mysql 3306; do echo "attente de mysql..."; sleep 3; done
+      containers:
+        - name: backend
+          image: IMAGE_BACKEND
+          # Le tag « essai » est mutable : on le réécrit à chaque build. Or
+          # Kubernetes n'applique « Always » par défaut qu'au tag « latest »,
+          # et retomberait ici sur IfNotPresent — le nœud réutiliserait alors
+          # l'image déjà en cache et votre nouvelle version ne tournerait
+          # jamais, même après un rollout restart.
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # --- Base de données -------------------------------------------
+            # Ces variables SPRING_DATASOURCE_* priment sur les valeurs écrites
+            # dans application.properties : une variable d'environnement a une
+            # priorité plus élevée qu'un fichier de propriétés dans Spring Boot.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:mysql://mysql:3306/gamegauge_db?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: gamegauge-secrets
+                  key: DB_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gamegauge-secrets
+                  key: DB_PASSWORD
+
+            # --- Sécurité ---------------------------------------------------
+            - name: APPLICATION_SECURITY_JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gamegauge-secrets
+                  key: JWT_SECRET
+            - name: RECAPTCHA_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gamegauge-secrets
+                  key: RECAPTCHA_SECRET_KEY
+
+            # --- Messagerie -------------------------------------------------
+            # Ces quatre variables ne sont pas optionnelles, même sans envoi de
+            # mail : sans spring.mail.host, Spring Boot ne crée pas le bean
+            # JavaMailSender, et EmailService qui l'injecte fait échouer tout le
+            # démarrage. Des valeurs factices suffisent pour l'essai.
+            - name: SPRING_MAIL_HOST
+              value: smtp.example.invalid
+            - name: SPRING_MAIL_PORT
+              value: "587"
+            - name: SPRING_MAIL_USERNAME
+              value: essai@gamegauge.fr
+            - name: SPRING_MAIL_PASSWORD
+              value: essai
+
+            # --- Supervision -------------------------------------------------
+            # Sans effet si Actuator n'est pas dans l'image : Spring Boot
+            # ignore simplement les propriétés qu'il ne connaît pas. On peut
+            # donc appliquer ce manifeste avant ou après la reconstruction.
+            - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+              value: health,info,prometheus
+            - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
+              value: "true"
+            - name: MANAGEMENT_METRICS_TAGS_APPLICATION
+              value: gamegauge-api
+
+            # --- JVM ---------------------------------------------------------
+            # La JVM ne voit pas la limite mémoire du conteneur sans indication :
+            # on lui demande de dimensionner son tas en pourcentage de la limite.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=70"
+
+          # L'application n'embarque pas spring-boot-starter-actuator, il n'y a
+          # donc pas d'endpoint /actuator/health : on sonde le port TCP.
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 300m
+              memory: 768Mi
+            limits:
+              memory: 1200Mi

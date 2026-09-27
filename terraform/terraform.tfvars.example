@@ -1,0 +1,13 @@
+# Copiez ce fichier en terraform.tfvars puis renseignez votre projet.
+# terraform.tfvars ne doit pas être versionné (voir .gitignore).
+
+project_id = "gamegauge-essai-123456"
+
+# Valeurs par défaut, à ajuster si besoin :
+# region            = "europe-west1"
+# zone              = "europe-west1-b"
+# node_machine_type = "e2-standard-2"   # ne descendez pas en dessous : sur
+#                                       # e2-medium le backend reste en Pending
+# node_count        = 2
+# node_disk_size_gb = 30
+# use_spot_vms      = false

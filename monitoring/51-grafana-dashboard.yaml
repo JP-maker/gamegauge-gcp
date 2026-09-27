@@ -1,0 +1,434 @@
+# ============================================================================
+#  Tableau de bord Grafana, provisionné depuis cette ConfigMap.
+#  Huit panneaux : une rangée de chiffres instantanés, puis le trafic, la JVM
+#  et la consommation des pods dans le temps.
+#  Les quatre premiers panneaux applicatifs restent vides jusqu'à ce que
+#  l'image de l'API soit reconstruite avec Actuator et Micrometer.
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+data:
+  gamegauge-overview.json: |
+    {
+      "uid": "gamegauge-overview",
+      "title": "GameGauge — vue d'ensemble",
+      "description": "Trafic applicatif, JVM et consommation des pods pour l'essai GKE.",
+      "tags": [
+        "gamegauge",
+        "essai"
+      ],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "refresh": "30s",
+      "time": {
+        "from": "now-30m",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Pods en cours d'exécution",
+          "description": "Namespace gamegauge. Attendu : 4 pods (mysql, backend, 2 frontend).",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 0
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(kube_pod_status_phase{namespace=\"gamegauge\",phase=\"Running\"})"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Réplicas frontend disponibles",
+          "description": "Tombe à 1 puis remonte à 2 lors de la démonstration d'autoguérison.",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 0
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "green",
+                    "value": 2
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "kube_deployment_status_replicas_available{namespace=\"gamegauge\",deployment=\"frontend\"}"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Requêtes API par seconde",
+          "description": "Moyenne sur 5 minutes, toutes routes confondues.",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 0
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "none",
+            "graphMode": "area",
+            "textMode": "auto",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"gamegauge\"}[5m]))"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Taux de requêtes par route",
+          "description": "Vient de Micrometer dans l'API. Vide si l'image n'est pas encore instrumentée.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 4
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "pointSize": 8,
+                "spanNulls": false,
+                "axisBorderShow": false,
+                "gradientMode": "none"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (uri) (rate(http_server_requests_seconds_count{namespace=\"gamegauge\"}[5m]))",
+              "legendFormat": "{{uri}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Latence des requêtes, 95e centile",
+          "description": "95 % des requêtes sont servies plus vite que cette valeur.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 4
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "pointSize": 8,
+                "spanNulls": false,
+                "axisBorderShow": false,
+                "gradientMode": "none"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{namespace=\"gamegauge\"}[5m])))",
+              "legendFormat": "{{uri}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Mémoire du tas JVM",
+          "description": "Le maximum découle de -XX:MaxRAMPercentage=70 appliqué à la limite du conteneur.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 12
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "pointSize": 8,
+                "spanNulls": false,
+                "axisBorderShow": false,
+                "gradientMode": "none"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(jvm_memory_used_bytes{namespace=\"gamegauge\",area=\"heap\"})",
+              "legendFormat": "utilisé"
+            },
+            {
+              "refId": "B",
+              "expr": "sum(jvm_memory_max_bytes{namespace=\"gamegauge\",area=\"heap\"})",
+              "legendFormat": "maximum"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "CPU consommé par pod",
+          "description": "En cœurs. Source : cAdvisor, embarqué dans la kubelet.",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 12
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "pointSize": 8,
+                "spanNulls": false,
+                "axisBorderShow": false,
+                "gradientMode": "none"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"gamegauge\",container!=\"\"}[5m]))",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Mémoire de travail par pod",
+          "description": "C'est cette valeur, et non la mémoire réservée, que Kubernetes compare à la limite avant d'évincer un pod.",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 20
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "pointSize": 8,
+                "spanNulls": false,
+                "axisBorderShow": false,
+                "gradientMode": "none"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"gamegauge\",container!=\"\"})",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        }
+      ]
+    }

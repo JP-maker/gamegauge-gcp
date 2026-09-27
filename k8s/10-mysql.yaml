@@ -1,0 +1,96 @@
+# ============================================================================
+#  MySQL en StatefulSet
+#  Un StatefulSet plutôt qu'un Deployment : identité stable du pod et, surtout,
+#  volumeClaimTemplates qui provisionne automatiquement un disque persistant
+#  GCE rattaché au pod. Le disque survit au redémarrage du pod.
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: gamegauge
+spec:
+  # Service « headless » : pas d'IP virtuelle, le nom DNS « mysql » résout
+  # directement vers l'IP du pod. C'est la convention pour un StatefulSet.
+  clusterIP: None
+  selector:
+    app: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: gamegauge
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          args:
+            # utf8mb4 explicite : évite les surprises sur les noms de joueurs
+            # avec accents ou emoji.
+            - --character-set-server=utf8mb4
+            - --collation-server=utf8mb4_unicode_ci
+          env:
+            - name: MYSQL_DATABASE
+              value: gamegauge_db
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gamegauge-secrets
+                  key: DB_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gamegauge-secrets
+                  key: DB_PASSWORD
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gamegauge-secrets
+                  key: DB_ROOT_PASSWORD
+          ports:
+            - name: mysql
+              containerPort: 3306
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mysqladmin ping -h 127.0.0.1 -u root -p"$MYSQL_ROOT_PASSWORD"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+          resources:
+            requests:
+              cpu: 250m
+              memory: 700Mi
+            limits:
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # Pas de storageClassName : GKE utilise sa classe par défaut
+        # (standard-rwo, un disque persistant équilibré).
+        resources:
+          requests:
+            storage: 10Gi

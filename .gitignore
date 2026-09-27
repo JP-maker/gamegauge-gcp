@@ -1,0 +1,12 @@
+terraform.tfvars
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+
+# Le secret rempli ne doit jamais être versionné
+k8s/01-secret.yaml
+
+# Manifests avec les images injectées
+k8s/*.generated.yaml
